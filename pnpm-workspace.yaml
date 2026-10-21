@@ -22,5 +22,5 @@ overrides:
   # `instanceof SettleError`, and those only match when the error class comes from
   # the same copy as the rail's own, so hold both packages to the version the
   # service declares.
-  radius-sdk>@x402/core: $@x402/core
-  radius-sdk>@x402/evm: $@x402/evm
+  radius-sdk>@x402/core: ^2.28.0
+  radius-sdk>@x402/evm: ^2.28.0
