@@ -175,19 +175,35 @@ describe("discovery", () => {
 
     expect(await facts({}, TEST_CHAIN_ID)).toEqual({
       testnet: true,
+      radius: false,
+      radiustestnet: false,
       mpp: true,
       mpptestnet: true,
     });
-    expect(await facts({}, MAINNET)).toEqual({ testnet: true, mpp: true, mpptestnet: false });
+    expect(await facts({}, MAINNET)).toEqual({
+      testnet: true,
+      radius: false,
+      radiustestnet: false,
+      mpp: true,
+      mpptestnet: false,
+    });
     expect(await facts({ allowTestnet: false, mpp: undefined }, MAINNET)).toEqual({
       testnet: false,
+      radius: false,
+      radiustestnet: false,
       mpp: false,
       mpptestnet: false,
     });
   });
 
   it("the_guide_keeps_only_the_sections_true_of_the_deployment", () => {
-    const facts: GuideFacts = { testnet: false, mpp: false, mpptestnet: false };
+    const facts: GuideFacts = {
+      testnet: false,
+      radius: false,
+      radiustestnet: false,
+      mpp: false,
+      mpptestnet: false,
+    };
     const template = [
       "always, {price}",
       "{if testnet}",
@@ -218,7 +234,13 @@ describe("discovery", () => {
   });
 
   it("a_guide_the_renderer_cannot_read_refuses_startup", () => {
-    const facts: GuideFacts = { testnet: false, mpp: false, mpptestnet: false };
+    const facts: GuideFacts = {
+      testnet: false,
+      radius: false,
+      radiustestnet: false,
+      mpp: false,
+      mpptestnet: false,
+    };
     expect(() => renderGuide("{if nonsense}\n{end}", facts)).toThrow(/unknown section/);
     expect(() => renderGuide("{end}", facts)).toThrow(/without a matching/);
     expect(() => renderGuide("{if mpp}", facts)).toThrow(/never closed/);
@@ -231,25 +253,46 @@ describe("discovery", () => {
     for (const testnet of [false, true]) {
       for (const mpp of [false, true]) {
         for (const mpptestnet of [false, true]) {
-          const facts = { testnet, mpp, mpptestnet: mpp && mpptestnet };
-          const label = JSON.stringify(facts);
-          const guide = renderGuide(template, facts);
+          for (const radius of [false, true]) {
+            for (const radiustestnet of [false, true]) {
+              // A deployment that offers the Radius testnet allows testnets, and has
+              // Radius on to offer it on.
+              const facts = {
+                testnet,
+                radius,
+                radiustestnet: radius && testnet && radiustestnet,
+                mpp,
+                mpptestnet: mpp && mpptestnet,
+              };
+              const label = JSON.stringify(facts);
+              const guide = renderGuide(template, facts);
 
-          expect(guide, label).not.toMatch(/\{if |\{end\}|\{prices?\}|\n\n\n/);
-          expect(guide, label).toContain(
-            "purl --max-amount 5000 '{origin}/res/v1/web/search?q=rust'",
-          );
-          expect(guide, label).toContain("| `/res/v1/local/descriptions` | 5000 | $5/1k |");
-          if (!facts.testnet && !facts.mpptestnet) {
-            expect(guide, label).not.toMatch(/sepolia|testnet|moderato/i);
+              expect(guide, label).not.toMatch(/\{if |\{end\}|\{prices?\}|\n\n\n/);
+              expect(guide, label).toContain(
+                "purl --max-amount 5000 '{origin}/res/v1/web/search?q=rust'",
+              );
+              expect(guide, label).toContain("| `/res/v1/local/descriptions` | 5000 | $5/1k |");
+              if (!facts.testnet && !facts.mpptestnet) {
+                expect(guide, label).not.toMatch(/sepolia|testnet|moderato/i);
+              }
+              if (!mpp) {
+                expect(guide, label).not.toMatch(/\bmpp\b|pathusd|\btempo\b/i);
+              } else {
+                expect(guide, label).toContain("Both rails charge the same price");
+              }
+              expect(guide.includes("Base Sepolia"), label).toBe(testnet);
+              expect(guide.includes("npx mppx --network testnet"), label).toBe(facts.mpptestnet);
+
+              // Radius is named only where it is sold, and its testnet only where
+              // that is offered too.
+              expect(/radius|\bsbc\b/i.test(guide), label).toBe(radius);
+              expect(guide.includes("eip155:723487"), label).toBe(radius);
+              expect(guide.includes("eip155:72344"), label).toBe(facts.radiustestnet);
+              expect(guide.includes("radius-cli --network testnet wallet pay get"), label).toBe(
+                facts.radiustestnet,
+              );
+            }
           }
-          if (!mpp) {
-            expect(guide, label).not.toMatch(/\bmpp\b|pathusd|\btempo\b/i);
-          } else {
-            expect(guide, label).toContain("Both rails charge the same price");
-          }
-          expect(guide.includes("Base Sepolia"), label).toBe(testnet);
-          expect(guide.includes("npx mppx --network testnet"), label).toBe(facts.mpptestnet);
         }
       }
     }

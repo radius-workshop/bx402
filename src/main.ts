@@ -36,7 +36,8 @@ async function run(): Promise<void> {
       ? "x402 rail: disabled by ENABLED_RAILS"
       : `x402 facilitator: ${config.x402.facilitatorUrl}` +
           (config.x402.cdp === undefined ? "" : " (cdp credentials set)") +
-          (config.x402.enableBazaar ? ", bazaar enabled" : ", bazaar disabled"),
+          (config.x402.enableBazaar ? ", bazaar enabled" : ", bazaar disabled") +
+          (config.x402.enableRadius ? ", radius enabled" : ", radius disabled"),
   );
   log.info(
     config.mpp === undefined

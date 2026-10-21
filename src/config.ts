@@ -62,6 +62,12 @@ export interface X402Config {
    * paths. On only for a deployment that should be listed, such as production.
    */
   enableBazaar: boolean;
+  /**
+   * Whether the rail also sells in SBC on Radius, settled by Radius's own
+   * facilitators, which need no credentials. Off by default, so a deployment
+   * only offers Radius once it has chosen to.
+   */
+  enableRadius: boolean;
 }
 
 /**
@@ -130,6 +136,9 @@ export interface Config {
  * - `X402_ENABLE_BAZAAR` (optional, read only when the x402 rail is enabled):
  *   `true` lets facilitator catalogs such as the Bazaar list the paid paths.
  *   Unset or `false` keeps them out.
+ * - `X402_ENABLE_RADIUS` (optional, read only when the x402 rail is enabled):
+ *   `true` also sells in SBC on Radius, settled by the Radius facilitators.
+ *   Unset or `false` leaves Radius out.
  * - `MPP_RPC_URL` (required when the MPP rail is enabled): Tempo RPC endpoint.
  * - `MPP_SECRET_KEY` (required when the MPP rail is enabled): HMAC secret binding
  *   MPP challenges to this service.
@@ -169,25 +178,24 @@ function x402FromEnv(env: NodeJS.ProcessEnv): X402Config {
   return {
     facilitatorUrl: requireVar(env, "X402_FACILITATOR_URL"),
     cdp,
-    enableBazaar: enableBazaarFromEnv(env),
+    enableBazaar: flagFromEnv(env, "X402_ENABLE_BAZAAR"),
+    enableRadius: flagFromEnv(env, "X402_ENABLE_RADIUS"),
   };
 }
 
 /**
- * Read whether the paid paths may be listed. Anything but `true` or `false` is a
- * misconfiguration, so a mistyped value cannot quietly decide either way.
+ * Read an on/off switch that is off when unset. Anything but `true` or `false` is
+ * a misconfiguration, so a mistyped value cannot quietly decide either way.
  */
-function enableBazaarFromEnv(env: NodeJS.ProcessEnv): boolean {
-  const value = optionalVar(env, "X402_ENABLE_BAZAAR");
+function flagFromEnv(env: NodeJS.ProcessEnv, name: string): boolean {
+  const value = optionalVar(env, name);
   if (value === undefined || value === "false") {
     return false;
   }
   if (value === "true") {
     return true;
   }
-  throw AppError.invalidConfig(
-    `X402_ENABLE_BAZAAR: expected true or false, got ${JSON.stringify(value)}`,
-  );
+  throw AppError.invalidConfig(`${name}: expected true or false, got ${JSON.stringify(value)}`);
 }
 
 /**

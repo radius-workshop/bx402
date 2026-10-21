@@ -143,6 +143,10 @@ function operation(ctx: Context, endpoint: Endpoint): Operation {
 export interface GuideFacts {
   /** The x402 rail advertises a testnet offer. */
   testnet: boolean;
+  /** The x402 rail advertises an offer in SBC on Radius. */
+  radius: boolean;
+  /** The x402 rail advertises an offer in SBC on the Radius testnet. */
+  radiustestnet: boolean;
   /** The MPP rail takes payments. */
   mpp: boolean;
   /** The MPP rail settles on a testnet. */
@@ -151,8 +155,11 @@ export interface GuideFacts {
 
 /** The facts true of the deployment running `ctx`, read from its started rails. */
 export function guideFacts(ctx: Context): GuideFacts {
+  const radius = ctx.x402 === undefined ? undefined : x402.servesRadius(ctx.x402);
   return {
     testnet: ctx.x402 !== undefined && x402.servesTestnet(ctx.x402),
+    radius: radius?.radius === true,
+    radiustestnet: radius?.testnet === true,
     mpp: ctx.mpp !== undefined,
     mpptestnet: ctx.mpp !== undefined && mpp.servesTestnet(ctx.mpp),
   };

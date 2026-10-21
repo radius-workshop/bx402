@@ -166,6 +166,8 @@ overrides:
   ox: 0.14.44
   axios: 1.20.0
   source-map-js: ^1.2.2
+  radius-sdk>@x402/core: ^2.28.0
+  radius-sdk>@x402/evm: ^2.28.0
 
 importers:
 
@@ -201,6 +203,9 @@ importers:
       ox:
         specifier: 0.14.44
         version: 0.14.44(typescript@7.0.2)(zod@4.5.4)
+      radius-sdk:
+        specifier: 0.6.0
+        version: 0.6.0(hono@4.13.8)(typescript@7.0.2)(viem@2.56.5(typescript@7.0.2)(zod@4.5.4))
       undici:
         specifier: ^8.10.2
         version: 8.11.2
@@ -1519,6 +1524,18 @@ packages:
   proxy-from-env@2.1.0:
     resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
     engines: {node: '>=10'}
+
+  radius-sdk@0.6.0:
+    resolution: {integrity: sha512-h7/xt5tReokQR96dxFbV+anrNk/wlbRg9yk4WshljKAnRKgHI65fV1H5IG83/5MhtTPZtzfTq9TYfaWe/vVr4A==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      hono: ^4.0.0
+      viem: ^2.48.11
+    peerDependenciesMeta:
+      hono:
+        optional: true
+      viem:
+        optional: true
 
   require-from-string@2.0.2:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
@@ -3016,6 +3033,19 @@ snapshots:
       source-map-js: 1.2.2
 
   proxy-from-env@2.1.0: {}
+
+  radius-sdk@0.6.0(hono@4.13.8)(typescript@7.0.2)(viem@2.56.5(typescript@7.0.2)(zod@4.5.4)):
+    dependencies:
+      '@noble/hashes': 1.8.0
+      '@x402/core': 2.28.0
+      '@x402/evm': 2.28.0(typescript@7.0.2)
+    optionalDependencies:
+      hono: 4.13.8
+      viem: 2.56.5(typescript@7.0.2)(zod@4.5.4)
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
 
   require-from-string@2.0.2: {}
 

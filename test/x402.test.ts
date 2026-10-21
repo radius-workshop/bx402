@@ -214,7 +214,12 @@ describe("x402", () => {
 
   it("discovery_offers_restate_the_accepts_table", () => {
     const built = client(
-      { facilitatorUrl: "https://x402.org/facilitator", cdp: undefined, enableBazaar: true },
+      {
+        facilitatorUrl: "https://x402.org/facilitator",
+        cdp: undefined,
+        enableBazaar: true,
+        enableRadius: false,
+      },
       true,
     );
     const entries = offersFor(true, "/res/v1/web/search");
@@ -238,7 +243,12 @@ describe("x402", () => {
 
   it("discovery_offers_are_empty_for_a_path_that_is_not_sold", () => {
     const built = client(
-      { facilitatorUrl: "https://x402.org/facilitator", cdp: undefined, enableBazaar: true },
+      {
+        facilitatorUrl: "https://x402.org/facilitator",
+        cdp: undefined,
+        enableBazaar: true,
+        enableRadius: false,
+      },
       true,
     );
     expect(offers(built, "/res/v1/answers/search")).toEqual([]);
@@ -509,10 +519,21 @@ describe("x402", () => {
     // while it lives, so that combination must never build.
     const cdp = { apiKeyId: "key-id", apiKeySecret: "key-secret" };
     expect(() =>
-      client({ facilitatorUrl: "https://x402.org/facilitator", cdp, enableBazaar: true }, true),
+      client(
+        {
+          facilitatorUrl: "https://x402.org/facilitator",
+          cdp,
+          enableBazaar: true,
+          enableRadius: false,
+        },
+        true,
+      ),
     ).toThrow(/api\.cdp\.coinbase\.com/);
     expect(
-      client({ facilitatorUrl: CDP_FACILITATOR_URL, cdp, enableBazaar: true }, true),
+      client(
+        { facilitatorUrl: CDP_FACILITATOR_URL, cdp, enableBazaar: true, enableRadius: false },
+        true,
+      ),
     ).toBeDefined();
   });
 
@@ -521,6 +542,7 @@ describe("x402", () => {
       {
         facilitatorUrl: CDP_FACILITATOR_URL,
         enableBazaar: true,
+        enableRadius: false,
         cdp: { apiKeyId: "key-id", apiKeySecret: testCdpSecret() },
       },
       true,
@@ -653,7 +675,12 @@ describe("x402", () => {
     // declaration is what makes a facilitator catalog a path, so it goes, and the
     // resource goes with it.
     const built = client(
-      { facilitatorUrl: "https://x402.org/facilitator", cdp: undefined, enableBazaar: false },
+      {
+        facilitatorUrl: "https://x402.org/facilitator",
+        cdp: undefined,
+        enableBazaar: false,
+        enableRadius: false,
+      },
       true,
     );
     const entry = challenge(built, REQUESTED, "GET");

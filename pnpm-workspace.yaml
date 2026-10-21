@@ -16,3 +16,11 @@ overrides:
   # version is flagged by pnpm audit (GHSA-68fv-2mgg-jv7q, fixed in 1.2.2) and
   # only vitest reaches it, never the service.
   source-map-js: ^1.2.2
+  # radius-sdk pins @x402/core and @x402/evm to the exact version it was released
+  # against, so a plain install brings in a second copy of each. The x402 rail
+  # tells a facilitator's refusal from an outage with `instanceof VerifyError` and
+  # `instanceof SettleError`, and those only match when the error class comes from
+  # the same copy as the rail's own, so hold both packages to the version the
+  # service declares.
+  radius-sdk>@x402/core: $@x402/core
+  radius-sdk>@x402/evm: $@x402/evm
