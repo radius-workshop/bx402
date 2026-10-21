@@ -25,6 +25,8 @@ import {
 } from "@x402/core/types";
 import { findDefaultAsset, getDefaultAsset } from "@x402/evm";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
+import { type PaymentNetwork, radiusMainnet, radiusTestnet } from "radius-sdk";
+import { RadiusExactScheme, RadiusFacilitatorClient } from "radius-sdk/server";
 import { base, baseSepolia } from "viem/chains";
 import type { Call } from "./calls.js";
 import { ClaimStore } from "./claims.js";
@@ -77,16 +79,42 @@ export const RAIL = "x402";
 const X402_METHOD = "x402";
 
 /**
- * The networks this rail sells on, in the order offers are advertised: the
- * CAIP-2 id the protocol names, and the viem definition that names the chain
- * in words. Whether each is a testnet is stated rather than read off the
- * chain, so a definition that stops carrying the flag cannot quietly turn a
- * testnet into money.
+ * A network this rail sells on. The CAIP-2 id is what the protocol names, and the
+ * chain names it in words. `radius` is present on Radius networks only, carrying
+ * what the Radius SDK knows about them: the SBC token, and the facilitator that
+ * settles on them. A Radius network is sold only when the deployment turns Radius
+ * on, and its token is the SDK's rather than an `@x402/evm` default asset.
  */
-const NETWORKS = [
+interface Network {
+  readonly caip2: `${string}:${string}`;
+  readonly chain: { readonly name: string };
+  readonly testnet: boolean;
+  readonly radius?: PaymentNetwork;
+}
+
+/**
+ * The networks this rail can sell on, in the order offers are advertised:
+ * testnets first, then mainnets, and within each the x402 default chain before
+ * Radius. Whether each is a testnet is stated rather than read off the chain, so a
+ * definition that stops carrying the flag cannot quietly turn a testnet into
+ * money.
+ */
+const NETWORKS: readonly Network[] = [
   { caip2: "eip155:84532", chain: baseSepolia, testnet: true },
+  {
+    caip2: radiusTestnet.network,
+    chain: radiusTestnet.chain,
+    testnet: true,
+    radius: radiusTestnet,
+  },
   { caip2: "eip155:8453", chain: base, testnet: false },
-] as const;
+  {
+    caip2: radiusMainnet.network,
+    chain: radiusMainnet.chain,
+    testnet: false,
+    radius: radiusMainnet,
+  },
+];
 
 /** How the advertised asset moves. Every offer we make is an EIP-3009 transfer. */
 const ASSET_TRANSFER_METHOD = "eip3009";
@@ -115,25 +143,49 @@ export function hasPayment(headers: Headers): boolean {
 }
 
 /**
+ * The networks a deployment sells on: every mainnet, the testnets when they are
+ * allowed, and the Radius networks only when Radius is turned on.
+ */
+function sellable(allowTestnet: boolean, enableRadius: boolean): Network[] {
+  return NETWORKS.filter(
+    (network) =>
+      (allowTestnet || !network.testnet) && (enableRadius || network.radius === undefined),
+  );
+}
+
+/** The token a network sells in: the SDK's for Radius, else the `@x402/evm` default. */
+function assetOf(network: Network): { asset: string; name: string; version: string } {
+  if (network.radius === undefined) {
+    return getDefaultAsset(network.caip2);
+  }
+  const { address, name, version } = network.radius.asset;
+  return { asset: address, name, version };
+}
+
+/**
  * Build the list of payment offers we advertise and verify against. The same
  * entries seed both the cold `402` and payment verification, so there is one
  * source of truth for what we charge: real USDC on Base mainnet, plus faucet
- * USDC on Base Sepolia when the testnet is allowed.
+ * USDC on Base Sepolia when the testnet is allowed, and SBC on Radius, mainnet
+ * and testnet by the same rule, when Radius is turned on.
  *
  * The order states the deployment's preference. A deployment that allows the
  * testnet leads with it, so clients that take the first offer they support pay
  * with faucet money rather than the real thing.
  */
-export function accepts(allowTestnet: boolean): Map<string, PaymentRequirements[]> {
-  const networks = NETWORKS.filter((network) => allowTestnet || !network.testnet);
+export function accepts(
+  allowTestnet: boolean,
+  enableRadius = false,
+): Map<string, PaymentRequirements[]> {
+  const networks = sellable(allowTestnet, enableRadius);
   return new Map<string, PaymentRequirements[]>(
     ENDPOINTS.map((endpoint) => [
       endpoint.path,
-      networks.map(({ caip2 }) => {
-        const asset = getDefaultAsset(caip2);
+      networks.map((network) => {
+        const asset = assetOf(network);
         return {
           scheme: "exact",
-          network: caip2,
+          network: network.caip2,
           amount: String(endpoint.priceBaseUnits),
           asset: asset.asset,
           payTo: PAY_TO_EVM,
@@ -320,25 +372,69 @@ export function client(rail: X402Config, allowTestnet: boolean): Client {
       config.createAuthHeaders = createAuthHeaders;
     }
   }
+  const facilitators: FacilitatorClient[] = [new HTTPFacilitatorClient(config)];
+  if (rail.enableRadius) {
+    // Ahead of the configured facilitator, which the resource server consults in
+    // order, so a Radius network is always settled by Radius's own facilitator.
+    facilitators.unshift(...radiusNetworks(allowTestnet).map(radiusFacilitator));
+  }
   return {
-    server: resourceServer(new HTTPFacilitatorClient(config)),
-    accepts: accepts(allowTestnet),
+    server: resourceServer(facilitators, rail.enableRadius),
+    accepts: accepts(allowTestnet, rail.enableRadius),
     claims: new ClaimStore(),
     enableBazaar: rail.enableBazaar,
   };
 }
 
-/** The SDK's resource server over `facilitator`, with the exact scheme on each of `NETWORKS`. */
-export function resourceServer(facilitator: FacilitatorClient): x402ResourceServer {
-  return registerExactEvmScheme(new x402ResourceServer(facilitator), {
-    networks: NETWORKS.map(({ caip2 }) => caip2),
-  });
+/** The Radius networks a deployment sells on, as the Radius SDK defines them. */
+function radiusNetworks(allowTestnet: boolean): PaymentNetwork[] {
+  return sellable(allowTestnet, true).flatMap(({ radius }) =>
+    radius === undefined ? [] : [radius],
+  );
 }
 
 /**
- * Build the client and load what the facilitator supports, which the resource
+ * The SDK's client for the facilitator that settles `network`: Radius's own,
+ * which takes no credentials and looks up what it supports when the service
+ * starts, like any other facilitator.
+ */
+function radiusFacilitator(network: PaymentNetwork): FacilitatorClient {
+  return new RadiusFacilitatorClient(network);
+}
+
+/**
+ * The SDK's resource server over `facilitators`, with the exact scheme on each
+ * of `NETWORKS`, Radius's only when `enableRadius`.
+ *
+ * Radius networks use the Radius SDK's scheme, set to settle after the handler.
+ * The scheme decides when a payment is verified: its default would settle first
+ * and skip the dry-run verification, and this rail verifies, runs the search, then
+ * settles.
+ */
+export function resourceServer(
+  facilitators: FacilitatorClient | FacilitatorClient[],
+  enableRadius = false,
+): x402ResourceServer {
+  const server = registerExactEvmScheme(new x402ResourceServer(facilitators), {
+    networks: NETWORKS.filter(({ radius }) => radius === undefined).map(({ caip2 }) => caip2),
+  });
+  if (enableRadius) {
+    for (const network of radiusNetworks(true)) {
+      server.register(network.network, new RadiusExactScheme(network, "after"));
+    }
+  }
+  return server;
+}
+
+/**
+ * Build the client and load what the facilitators support, which the resource
  * server routes payments by. A facilitator that cannot be reached, or supports
  * nothing, stops startup.
+ *
+ * The resource server skips a facilitator it cannot reach as long as another
+ * answers, which would leave Radius advertised and unpayable behind a Base
+ * facilitator that is up. So every Radius network the deployment sells on must
+ * also be one a facilitator reports supporting, or startup stops.
  */
 export async function start(rail: X402Config, allowTestnet: boolean): Promise<Client> {
   const built = client(rail, allowTestnet);
@@ -346,6 +442,16 @@ export async function start(rail: X402Config, allowTestnet: boolean): Promise<Cl
     await built.server.initialize();
   } catch (err) {
     throw AppError.invalidConfig(`X402_FACILITATOR_URL: ${describe(err)}`);
+  }
+  if (rail.enableRadius) {
+    for (const network of radiusNetworks(allowTestnet)) {
+      if (built.server.getSupportedKind(2, network.network, "exact") === undefined) {
+        throw AppError.invalidConfig(
+          `X402_ENABLE_RADIUS: the Radius facilitator ${network.facilitatorUrl} did not ` +
+            `report supporting exact payments on ${network.network}`,
+        );
+      }
+    }
   }
   return built;
 }
@@ -440,6 +546,15 @@ export function servesTestnet(client: Client): boolean {
     .some((entry) => NETWORKS.find((network) => network.caip2 === entry.network)?.testnet);
 }
 
+/** Whether any offer this rail makes settles on Radius, and whether any such offer is a testnet. */
+export function servesRadius(client: Client): { radius: boolean; testnet: boolean } {
+  const radius = [...client.accepts.values()]
+    .flat()
+    .flatMap((entry) => NETWORKS.filter((network) => network.caip2 === entry.network))
+    .filter((network) => network.radius !== undefined);
+  return { radius: radius.length > 0, testnet: radius.some((network) => network.testnet) };
+}
+
 export function offers(client: Client, path: string): Offer[] {
   return (client.accepts.get(path) ?? []).map((entry) => ({
     intent: "charge",
@@ -458,8 +573,11 @@ export function offers(client: Client, path: string): Offer[] {
  * by its identifier rather than dropped or thrown on.
  */
 function describeOffer(entry: PaymentRequirements): string {
-  const symbol = findDefaultAsset(entry.asset, entry.network)?.symbol ?? entry.asset;
   const network = NETWORKS.find((candidate) => candidate.caip2 === entry.network);
+  const symbol =
+    network?.radius?.asset.symbol ??
+    findDefaultAsset(entry.asset, entry.network)?.symbol ??
+    entry.asset;
   if (network === undefined) {
     return `${symbol} on ${entry.network}`;
   }

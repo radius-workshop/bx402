@@ -36,7 +36,12 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
   return {
     braveSearchApiKey: "secret-key",
     braveSearchApiBaseUrl: "http://upstream.invalid",
-    x402: { facilitatorUrl: "http://facilitator.invalid", cdp: undefined, enableBazaar: true },
+    x402: {
+      facilitatorUrl: "http://facilitator.invalid",
+      cdp: undefined,
+      enableBazaar: true,
+      enableRadius: false,
+    },
     // The SDK refuses a secret key under 32 bytes, so this one is long enough to
     // build a handler with.
     mpp: { rpcUrl: "http://tempo.invalid", secretKey: "test-secret-of-at-least-32-bytes" },
@@ -193,6 +198,40 @@ export function mockFacilitatorSupport(): void {
     .reply(200, TEST_SUPPORT);
 }
 
+/** The origins of the facilitators that settle on the Radius testnet and mainnet. */
+export const RADIUS_TESTNET_FACILITATOR = "https://facilitator.testnet.radiustech.xyz";
+export const RADIUS_MAINNET_FACILITATOR = "https://facilitator.radiustech.xyz";
+
+/**
+ * What a Radius facilitator reports for its network: `exact` in SBC, by EIP-3009
+ * first and Permit2 second, as the live ones answer.
+ */
+export function radiusSupport(network: string): SupportedResponse {
+  return {
+    kinds: ["eip3009", "permit2"].map((assetTransferMethod) => ({
+      x402Version: 2,
+      scheme: "exact",
+      network: network as `${string}:${string}`,
+      extra: { assetTransferMethod, name: "Stable Coin", version: "1" },
+    })),
+    extensions: ["eip2612GasSponsoring"],
+    signers: {},
+  };
+}
+
+/**
+ * Stand in for the `GET /supported` of both Radius facilitators, which the x402
+ * rail loads at startup once Radius is turned on. Call `restoreNetwork` afterwards.
+ */
+export function mockRadiusSupport(): void {
+  mockOrigin(RADIUS_TESTNET_FACILITATOR)
+    .intercept({ method: "GET", path: "/supported" })
+    .reply(200, radiusSupport("eip155:72344"));
+  mockOrigin(RADIUS_MAINNET_FACILITATOR)
+    .intercept({ method: "GET", path: "/supported" })
+    .reply(200, radiusSupport("eip155:723487"));
+}
+
 /**
  * Stand in for `origin` on the shared mock network, for a test that stubs an
  * endpoint the fixed helpers below do not cover. Call `restoreNetwork` afterwards.
@@ -244,6 +283,9 @@ export const TEST_CHAIN_ID = 42431;
 function stubStartup(config: Config, chain = TEST_CHAIN_ID): void {
   if (config.x402 !== undefined) {
     mockFacilitatorSupport();
+    if (config.x402.enableRadius) {
+      mockRadiusSupport();
+    }
   }
   if (config.mpp !== undefined) {
     mockTempoRpc(chain);

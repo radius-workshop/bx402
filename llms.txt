@@ -21,6 +21,20 @@ of one search.
 This deployment also takes USDC on Base Sepolia (testnet), and lists that offer
 first.
 {end}
+{if radius}
+
+x402 rail, SBC on Radius, with the Radius CLI (https://www.npmjs.com/package/radius-cli):
+
+    radius-cli wallet pay get '{origin}/res/v1/web/search?q=rust' --threshold 0.005
+{if radiustestnet}
+
+This deployment also takes SBC on the Radius testnet. Put `--network testnet`
+before the subcommand to pay that offer:
+`radius-cli --network testnet wallet pay get ...`.
+{end}
+
+A Radius payer needs no gas, since the Radius facilitator pays it.
+{end}
 
 {if mpp}
 {if mpptestnet}
@@ -120,6 +134,13 @@ before choosing how to pay.
   This deployment also takes Base Sepolia, `eip155:84532`, and lists it first,
   so a client taking the first offer it supports pays with faucet money.
 {end}
+{if radius}
+  It also takes SBC on Radius, `eip155:723487`, an `exact` EIP-3009 transfer
+  that the Radius facilitator settles and pays the gas for.
+{if radiustestnet}
+  The Radius testnet, `eip155:72344`, is offered too, and is a testnet.
+{end}
+{end}
 {if mpp}
 {if mpptestnet}
 - MPP settles in pathUSD on Tempo Moderato, chain 42431, a testnet.
@@ -209,6 +230,9 @@ Any x402 V2 client can pay. For example:
 | ------ | ---- | ----- |
 | purl (https://github.com/stripe/purl) | x402 | Does not print the `Payment-Response` receipt; look the transfer up on the chain |
 | @x402/fetch (https://www.npmjs.com/package/@x402/fetch) | x402 | |
+{if radius}
+| radius-cli (https://www.npmjs.com/package/radius-cli) | x402 | Pays the Radius offer, and `radius-sdk/client` does the same from code |
+{end}
 | mppx (https://www.npmjs.com/package/mppx) | x402 | Pays x402 through its own adapter reading `Payment-Required` |
 {if mpp}
 | mppx (https://www.npmjs.com/package/mppx) | MPP | |

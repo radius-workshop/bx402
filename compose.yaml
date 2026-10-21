@@ -11,6 +11,8 @@ services:
       # The public testnet facilitator. Production points this at the
       # Coinbase-hosted one and sets the CDP key pair beside it.
       X402_FACILITATOR_URL: ${X402_FACILITATOR_URL:-https://x402.org/facilitator}
+      # Also sell in SBC on Radius, settled by the Radius facilitators.
+      X402_ENABLE_RADIUS: ${X402_ENABLE_RADIUS:-false}
       MPP_RPC_URL: ${MPP_RPC_URL:-https://rpc.moderato.tempo.xyz}
       MPP_SECRET_KEY: ${MPP_SECRET_KEY}
       # The compose stack is the testnet environment. Production unsets this.

@@ -9,7 +9,9 @@ act as the credential.
 
 `bx402` is `bx` ([Brave Search CLI](https://github.com/brave/brave-search-cli)) + `402`, the HTTP *Payment Required* status.
 The `402` is the shared mechanism, not a rail, so **x402** (USDC
-on Base) and **MPP** (pathUSD on Tempo) are equally first-class.
+on Base) and **MPP** (pathUSD on Tempo) are equally first-class. The x402 rail can also
+settle in SBC on [Radius](https://radiustech.xyz), see [Paying for a search on
+Radius](#paying-for-a-search-on-radius).
 
 | Spec | https://gist.github.com/onyb/a1d620ba1e6ded2577a2998f2ecb0f61 |
 -|-
@@ -101,6 +103,54 @@ verifying an MPP credential is what settles it. Only the payer needs funding.
    MPP clients print the `Payment-Receipt` header, so look the transaction up at
    `https://explore.testnet.tempo.xyz/receipt/<transaction>`.
 
+## Paying for a search on Radius
+
+Radius is another network on the x402 rail, so it takes no new rail and no new payment
+header: a client that pays x402 on Radius pays this service the same way. It is off unless
+`X402_ENABLE_RADIUS=true`, which leaves existing deployments exactly as they were.
+
+With it on, every paid path also offers SBC, a six decimal stablecoin, at the same price as
+the other networks, as an `exact` EIP-3009 transfer to the same treasury address. It is
+verified and settled by Radius's own facilitators, found by the [Radius SDK](https://www.npmjs.com/package/radius-sdk)
+(`radius-sdk`): `facilitator.radiustech.xyz` for Radius mainnet, and
+`facilitator.testnet.radiustech.xyz` for the testnet when `ALLOW_TESTNET=true`. They take no
+credentials and pay the gas, so the payer needs SBC and nothing else. `X402_FACILITATOR_URL`
+still names the facilitator for Base and is still required. Startup stops if a Radius
+facilitator is unreachable or does not report supporting the network, rather than serving an
+offer nothing can settle.
+
+| Party            | Owner | Requires        | Faucet                                            |
+| ---------------- | ----- | --------------- | ------------------------------------------------- |
+| Payer wallet     | Agent | Radius testnet SBC | `radius-cli --network testnet wallet faucet`   |
+| Treasury address | Brave | nothing         | —                                                 |
+
+The treasury is the same address on every EVM network, so it has to be one whose key works
+on Radius too.
+
+1. Start the server with Radius on (`ENABLED_RAILS=x402` serves the x402 rail alone):
+   ```sh
+   echo "BRAVE_SEARCH_API_KEY=<your-key>" >> .env
+   echo "ENABLED_RAILS=x402" >> .env
+   echo "X402_FACILITATOR_URL=https://x402.org/facilitator" >> .env
+   echo "X402_ENABLE_RADIUS=true" >> .env
+   echo "ALLOW_TESTNET=true" >> .env
+   pnpm install && pnpm build && pnpm start
+   ```
+2. Pay for a search with the [Radius CLI](https://www.npmjs.com/package/radius-cli): fund its
+   wallet from the faucet, then pay the Radius offer:
+   ```sh
+   npx radius-cli --network testnet wallet faucet
+   npx radius-cli --network testnet wallet pay get 'http://localhost:8080/res/v1/web/search?q=rust' --threshold 0.005
+   ```
+   `radius-sdk/client` pays the same way from code, with `createRadiusFetch`. The receipt
+   comes back in `PAYMENT-RESPONSE`, and the transaction is on the
+   [Radius testnet explorer](https://testnet.radiustech.xyz).
+
+Only x402 is served on Radius. The Radius SDK also speaks MPP, but its `evm` charge method
+settles an EIP-3009 authorization through an x402 facilitator, which is not what the MPP rail
+here does (it broadcasts a signed Tempo transaction), so the two do not share an
+implementation and Radius is not offered over MPP.
+
 ## Endpoints
 
 Every endpoint below is payable on both rails. Prices track Brave's published rates at
@@ -157,13 +207,17 @@ Brave logo.
 Both rails charge the same price for the same endpoint, to the same treasury, in base
 units of a six decimal token. See [Endpoints](#endpoints) for the per-endpoint price.
 
-| Rail | Mainnet             | Testnet                      | Asset   |
-| ---- | ------------------- | ---------------------------- | ------- |
-| x402 | Base, `eip155:8453` | Base Sepolia, `eip155:84532` | USDC    |
-| MPP  | Tempo, chain 4217   | Moderato, chain 42431        | pathUSD |
+| Rail | Mainnet                       | Testnet                                | Asset   |
+| ---- | ----------------------------- | -------------------------------------- | ------- |
+| x402 | Base, `eip155:8453`           | Base Sepolia, `eip155:84532`           | USDC    |
+| x402 | Radius, `eip155:723487`       | Radius testnet, `eip155:72344`         | SBC     |
+| MPP  | Tempo, chain 4217             | Moderato, chain 42431                  | pathUSD |
 
-`ALLOW_TESTNET=true` admits testnets. x402 then advertises the Base Sepolia offer first, so
-a client taking the first offer it supports pays with faucet money. MPP discovers its chain
+The Radius rows are offered only with `X402_ENABLE_RADIUS=true`.
+
+`ALLOW_TESTNET=true` admits testnets. x402 then advertises the testnet offers first, Base
+Sepolia then Radius testnet, so a client taking the first offer it supports pays with faucet
+money. The mainnet offers follow, Base then Radius. MPP discovers its chain
 from `MPP_RPC_URL` at startup and refuses to start on a testnet without the variable.
 
 `ENABLED_RAILS` picks which rails the deployment serves, as a comma-separated subset of

@@ -102,4 +102,30 @@ describe("config", () => {
       expect(() => enabled(value), value).toThrow(/X402_ENABLE_BAZAAR/);
     }
   });
+
+  it("radius_is_off_unless_enabled_exactly", () => {
+    const base = {
+      BRAVE_SEARCH_API_KEY: "secret-key",
+      X402_FACILITATOR_URL: "https://x402.org/facilitator",
+      ENABLED_RAILS: "x402",
+    };
+    const enabled = (value?: string) =>
+      configFromEnv(value === undefined ? base : { ...base, X402_ENABLE_RADIUS: value }).x402
+        ?.enableRadius;
+
+    // Selling on Radius is opt-in, so an existing deployment is unchanged.
+    expect(enabled()).toBe(false);
+    expect(enabled("")).toBe(false);
+    expect(enabled("false")).toBe(false);
+    expect(enabled("true")).toBe(true);
+
+    for (const value of ["True", "yes", "1", "on"]) {
+      expect(() => enabled(value), value).toThrow(/X402_ENABLE_RADIUS/);
+    }
+
+    // It is the x402 rail's setting, so a deployment without that rail never reads it.
+    expect(
+      configFromEnv({ ...base, ENABLED_RAILS: "none", X402_ENABLE_RADIUS: "yes" }).x402,
+    ).toBeUndefined();
+  });
 });
